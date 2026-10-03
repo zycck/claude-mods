@@ -11,6 +11,28 @@ const glyphs = cells => {
   for (let i = 0; i < w.length; i += 3) out += String.fromCodePoint(w[i])
   return out
 }
+// the track's unfilled background, read from the last cell of its latest frame
+const backOf = cells => new Uint32Array(Uint8Array.from(Buffer.from(cells, 'base64')).buffer).at(-1)
+const lum = c => ((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)
+const LUM_MID = 384
+// the latest track frame: a repaint if there was one, else the raster of the last render
+const trackTint = async E => {
+  const blit = E.blits.filter(b => b.key === 'track-t').at(-1)
+  if (blit) return backOf(blit.cells)
+  const r = (await E.terminal(120)).find(n => n.type === 'Raster' && n.props.key === 'track-t')
+  return backOf(r.props.cells)
+}
+const MACHINE = ['MAC', 'DARK', 'TERM_PROGRAM', 'THEME']
+// the tint tests play a machine through globals; each run starts from a light Mac and cleans up after itself
+async function withMachine(set, run) {
+  for (const k of MACHINE) delete globalThis[k]
+  Object.assign(globalThis, set)
+  try {
+    return await run()
+  } finally {
+    for (const k of MACHINE) delete globalThis[k]
+  }
+}
 const pct = async (E, id) => (await E.view(id)).alt.match(/\d+%/)?.[0]
 
 const C = {
@@ -407,24 +429,116 @@ const C = {
     return [`agent ${agentSounds} sounds, bar after agent question ${stateAfterAgentAsk}; main ${E.sounds.join(', ')}`, agentSounds === 0 && stateAfterAgentAsk === 'running' && E.sounds.length === 2]
   },
   async terminal_bar_follows_the_system_appearance_after_the_turn(E) {
-    const back = cells => new Uint32Array(Uint8Array.from(Buffer.from(cells, 'base64')).buffer).at(-1)
-    await E.turnStart()
-    await create(E)
-    await E.terminal(120)
-    await E.everyTick()
-    await E.everyTick()
-    await E.turnComplete(undefined)
-    E.tick(1000)
-    await E.everyTick()
-    const light = back(E.blits.filter(b => b.key === 'track-t').at(-1).cells)
-    const before = E.blits.length
-    globalThis.DARK = true
-    await E.everyTick()
-    globalThis.DARK = false
-    const fresh = E.blits.slice(before).filter(b => b.key === 'track-t')
-    const dark = fresh.length ? back(fresh.at(-1).cells) : light
-    const lum = c => ((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)
-    return [`${fresh.length} repaint, track ${light.toString(16)} → ${dark.toString(16)}`, fresh.length > 0 && lum(dark) < lum(light)]
+    // Terminal.app with the default "dark" theme: its stock profiles follow macOS, so the bar does too
+    return withMachine({ TERM_PROGRAM: 'Apple_Terminal' }, async () => {
+      await E.turnStart()
+      await create(E)
+      await E.terminal(120)
+      await E.everyTick()
+      await E.turnComplete(undefined)
+      E.tick(1000)
+      await E.everyTick()
+      const light = await trackTint(E)
+      const before = E.blits.length
+      globalThis.DARK = true
+      E.tick(5000)
+      await E.everyTick()
+      const fresh = E.blits.slice(before).filter(b => b.key === 'track-t')
+      const dark = fresh.length ? backOf(fresh.at(-1).cells) : light
+      return [`${fresh.length} repaint, track ${light.toString(16)} → ${dark.toString(16)}`, fresh.length > 0 && lum(light) > LUM_MID && lum(dark) < LUM_MID]
+    })
+  },
+  async dark_terminal_keeps_the_dark_theme(E) {
+    // a dark iTerm on a light Mac: the default "dark" theme stands, and the appearance is not read again
+    return withMachine({ TERM_PROGRAM: 'iTerm.app' }, async () => {
+      await create(E)
+      await E.terminal(120)
+      for (let i = 0; i < 12; i++) {
+        E.tick(1000)
+        await E.everyTick()
+      }
+      const tint = await trackTint(E)
+      const reads = E.procs.filter(c => c.startsWith('defaults')).length
+      return [`track ${tint.toString(16)}, appearance read ${reads}x`, lum(tint) < LUM_MID && reads === 1]
+    })
+  },
+  async picked_light_theme_wins_over_a_dark_mac(E) {
+    return withMachine({ DARK: true, TERM_PROGRAM: 'Apple_Terminal' }, async () => {
+      await E.setTheme('light')
+      await create(E)
+      await E.terminal(120)
+      for (let i = 0; i < 6; i++) {
+        E.tick(1000)
+        await E.everyTick()
+      }
+      const tint = await trackTint(E)
+      return [`track ${tint.toString(16)}, commands run ${E.procs.length}`, lum(tint) > LUM_MID && E.procs.length === 0]
+    })
+  },
+  async auto_theme_follows_the_mac_in_any_terminal(E) {
+    return withMachine({ TERM_PROGRAM: 'iTerm.app' }, async () => {
+      await E.setTheme('auto')
+      await create(E)
+      await E.terminal(120)
+      E.tick(1000)
+      await E.everyTick()
+      const light = await trackTint(E)
+      globalThis.DARK = true
+      E.tick(5000)
+      await E.everyTick()
+      const dark = await trackTint(E)
+      return [`track ${light.toString(16)} → ${dark.toString(16)}`, lum(light) > LUM_MID && lum(dark) < LUM_MID]
+    })
+  },
+  async no_mac_no_more_reads(E) {
+    // Windows or Linux: the command is missing once, then the theme setting decides and nothing runs again
+    return withMachine({ MAC: false }, async () => {
+      await E.setTheme('auto')
+      await create(E)
+      await E.terminal(120)
+      for (let i = 0; i < 20; i++) {
+        E.tick(1000)
+        await E.everyTick()
+      }
+      const tint = await trackTint(E)
+      return [`commands run ${E.procs.length}, track ${tint.toString(16)}`, E.procs.length === 1 && lum(tint) < LUM_MID]
+    })
+  },
+  async desktop_never_reads_the_appearance(E) {
+    return withMachine({ TERM_PROGRAM: 'Apple_Terminal' }, async () => {
+      await create(E)
+      await E.svgs()
+      for (let i = 0; i < 20; i++) {
+        E.tick(1000)
+        await E.everyTick()
+      }
+      return [`commands run ${E.procs.length}`, E.procs.length === 0]
+    })
+  },
+  async appearance_read_at_most_every_five_seconds(E) {
+    return withMachine({}, async () => {
+      await E.setTheme('auto')
+      await create(E)
+      await E.terminal(120)
+      for (let i = 0; i < 30; i++) {
+        E.tick(1000)
+        await E.everyTick()
+      }
+      const reads = E.procs.filter(c => c.startsWith('defaults')).length
+      return [`appearance read ${reads}x in 30 s`, reads >= 5 && reads <= 7]
+    })
+  },
+  async theme_picked_in_config_applies_at_once(E) {
+    return withMachine({ TERM_PROGRAM: 'iTerm.app' }, async () => {
+      await create(E)
+      await E.terminal(120)
+      E.tick(1000)
+      await E.everyTick()
+      const dark = await trackTint(E)
+      await E.setTheme('light')
+      const light = await trackTint(E)
+      return [`track ${dark.toString(16)} → ${light.toString(16)}`, lum(dark) < LUM_MID && lum(light) > LUM_MID]
+    })
   },
   async terminal_buttons_only_where_clicks_land(E) {
     await create(E)

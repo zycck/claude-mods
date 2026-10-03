@@ -16,6 +16,9 @@ export async function boot(file, kept = new Map()) {
   const sounds = []
   let toolSpec = null
   const blits = []
+  // the machine the stub plays: globalThis.MAC (default true), DARK for the macOS appearance,
+  // TERM_PROGRAM for the terminal, THEME for Claude Code's theme setting
+  const procs = []
   const $ = {
     __get(a) {
       return state.has(a.ref.key) ? state.get(a.ref.key) : a.initial
@@ -40,11 +43,19 @@ export async function boot(file, kept = new Map()) {
     },
     session: { id: async () => 'session-1' },
     audio: { play: async ({ asset }) => void sounds.push(asset) },
-    process: { run: async argv => (argv[0] === 'defaults' ? { exitCode: globalThis.DARK ? 0 : 1, stdout: globalThis.DARK ? 'Dark\n' : '' } : {}) },
+    process: {
+      run: async argv => {
+        procs.push(argv.join(' '))
+        if (globalThis.MAC === false) throw new Error(`${argv[0]}: not found`)
+        if (argv[0] === 'defaults') return { exitCode: globalThis.DARK ? 0 : 1, stdout: globalThis.DARK ? 'Dark\n' : '', stderr: '' }
+        if (argv[0] === '/bin/sh') return { exitCode: 0, stdout: globalThis.TERM_PROGRAM ?? '', stderr: '' }
+        return { exitCode: 0, stdout: '', stderr: '' }
+      },
+    },
     plugin: { root: '/plugin' },
     tool: { register: async spec => void (toolSpec = spec) },
     command: { register: async () => {} },
-    config: { list: async () => [] },
+    config: { list: async () => (globalThis.THEME === undefined ? [] : [{ key: 'theme', value: globalThis.THEME }]) },
     ui: {
       resolve: e => (e?.surface === 'terminal' ? { Box: 'Box', Button: 'Button', Text: 'Text', Raster: 'Raster' } : { Box: 'Box', Button: 'Button', Text: 'Text', Svg: 'Svg' }),
       toast: () => {},
@@ -68,6 +79,8 @@ export async function boot(file, kept = new Map()) {
     $,
     sounds,
     blits,
+    procs,
+    setTheme: value => dispatch('config.set', { key: 'theme', value, previous: globalThis.THEME ?? 'dark' }, () => ({ value })),
     coreRuns,
     get toolSpec() {
       return toolSpec

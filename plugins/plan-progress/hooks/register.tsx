@@ -873,6 +873,54 @@ function syncFrames($: EngineInterface, now: number) {
   }
 }
 
+// ---------- terminal tint ----------
+// the track's light or dark tint: a theme the person picked wins; "auto", and the default "dark" inside Terminal.app
+// (whose stock profiles follow macOS), take the macOS appearance. The appearance is read only while a terminal bar
+// is on screen, at most every APPEARANCE_MS, and never again once the command turns out to be missing (not a Mac)
+const APPEARANCE_MS = 5000
+let themeSetting = 'dark'
+let mac: 'unknown' | 'yes' | 'no' = 'unknown'
+let termProgram = ''
+let isSystemDark: boolean | null = null
+let appearanceAt = -Infinity
+let isProbing = false
+
+const followsSystem = () => mac !== 'no' && (themeSetting === 'auto' || (themeSetting === 'dark' && (mac === 'unknown' || termProgram === 'Apple_Terminal')))
+const tintIsLight = () => (followsSystem() && isSystemDark !== null ? !isSystemDark : /light/i.test(themeSetting))
+
+async function probeAppearance($: EngineInterface, now: number) {
+  if (isProbing || !followsSystem() || now - appearanceAt < APPEARANCE_MS) return
+  isProbing = true
+  appearanceAt = now
+  try {
+    const r = await $.process.run(['defaults', 'read', '-g', 'AppleInterfaceStyle'], { timeoutMs: 2000 }).catch(() => null)
+    if (!r) {
+      // no such command: not a Mac, so the theme setting alone decides from here on
+      mac = 'no'
+      return
+    }
+    if (mac === 'unknown') {
+      const t = await $.process.run(['/bin/sh', '-c', 'printf %s "$TERM_PROGRAM"'], { timeoutMs: 2000 }).catch(() => null)
+      termProgram = t?.stdout.trim() ?? ''
+      mac = 'yes'
+    }
+    // the key is missing in light mode, so anything but "Dark" reads as light
+    isSystemDark = /dark/i.test(r.stdout)
+  } finally {
+    isProbing = false
+  }
+}
+
+// reads the appearance when due and repaints the bars at once if the tint changed
+async function syncTint($: EngineInterface, now: number) {
+  if (band) await probeAppearance($, now)
+  const next = tintIsLight()
+  if (next === isLight) return
+  isLight = next
+  const b = band
+  if (b) await blitPlans($, b, b.list, now)
+}
+
 function blitPlans($: EngineInterface, b: Band, list: readonly Plan[], now: number) {
   return Promise.all(
     list.flatMap(p => {
@@ -1294,6 +1342,17 @@ export const register: Register = on => {
     }
   })
 
+  on('config.set', { key: 'theme' }, async ($, e, next) => {
+    const r = await next(e)
+    if (r.deny === undefined) {
+      themeSetting = String(r.value)
+      appearanceAt = -Infinity
+      await syncTint($, await $.clock.now())
+    }
+
+    return r
+  })
+
   on('session.start', async ($, e, next) => {
     await $.tool.register({
       name: 'plan_progress',
@@ -1322,21 +1381,14 @@ export const register: Register = on => {
     // a session reopened later (an app restart, a resume) finds its bars where it left them
     if ((await read($, plans)).length === 0) await restorePlans($)
     const theme = (await $.config.list().catch(() => [])).find(row => row.key === 'theme')
-    const themeLight = /light/i.test(String(theme?.value ?? ''))
-    const appearance = async () => {
-      const r = await $.process.run(['defaults', 'read', '-g', 'AppleInterfaceStyle'], { timeoutMs: 2000 }).catch(() => null)
-      const was = isLight
-      isLight = r ? !/dark/i.test(r.stdout) : themeLight
-      const b = band
-      if (was === isLight || !b) return
-      await blitPlans($, b, b.list, await $.clock.now())
-    }
-    await appearance()
-    $.clock.every(5000, appearance)
+    themeSetting = String(theme?.value ?? 'dark')
+    isLight = tintIsLight()
     $.clock.every(1000, async () => {
       const list = await read($, plans)
       forgetGone(list)
-      syncFrames($, await $.clock.now())
+      const now = await $.clock.now()
+      syncFrames($, now)
+      await syncTint($, now)
       if (list !== lastSaved) await savePlans($, list)
       // clocks count inside the frame, so the only timed redraw is folding finished strips away
       if (foldUntil === 0 || (await $.clock.now()) < foldUntil) return
