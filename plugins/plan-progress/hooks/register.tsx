@@ -291,12 +291,11 @@ function liveClock(x: number, top: number, start: number, cls: string, textCls: 
   )
 }
 
-// a bar's frame reloads whenever its markup changes; markup that differs only in when it was drawn keeps the
-// source already shown, so its clocks run on instead of the frame blinking
+// Every redraw of the band (another plugin's invalidate included) rebuilds the picture on the desktop, so a
+// source reused from an earlier draw restarts its clocks at that draw's offset: the offset is taken from now
+// on every draw, and the map only remembers which strips are on screen (see forgetGone)
 const lastSource = new Map<string, { template: string; source: string }>()
 function liveSource(id: string, template: string, now: number): string {
-  const last = lastSource.get(id)
-  if (last?.template === template) return last.source
   const source = template.replace(/\{\{T:(\d+)\}\}/g, (_, t: string) => Math.max(0, (now - Number(t)) / 1000).toFixed(1))
   lastSource.set(id, { template, source })
   return source
@@ -1046,7 +1045,9 @@ function syncAuto(p: Plan, now: number): Plan {
   const state: PlanState = isOver
     ? agents.some(a => a.state === 'error') ? 'error' : 'done'
     : agents.some(a => a.state === 'waiting') ? 'needs_input' : 'running'
-  return { ...p, agentsDoneAt, stages: [{ name: 'Agents', steps }], state }
+  // the pill says how many are still at work; the bar's title already says "Agents"
+  const running = agents.filter(a => a.state === 'running' || a.state === 'waiting').length
+  return { ...p, agentsDoneAt, stages: [{ name: isOver ? 'Agents' : `${running} running`, steps }], state }
 }
 
 function addRun(p: Plan, run: AgentRun, parentId: string | undefined, now: number): Plan {

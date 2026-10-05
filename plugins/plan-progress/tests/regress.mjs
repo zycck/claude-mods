@@ -223,14 +223,14 @@ const C = {
   async same_bar_same_source_while_time_passes(E) {
     await create(E)
     await E.spawn('ag1', 'Scan tests')
-    // the still parts: the track picture and the strips (the hover layer is rebuilt every redraw by design)
-    const still = v => v.track + v.strips.join('')
-    const a = still(await E.view('t'))
+    // the track picture stays as it was; a strip's clock offset follows the time passed, since the desktop
+    // rebuilds the band on every redraw and a reused offset would restart the clock from the earlier draw
+    const delay = v => v.strips.join('').match(/--d:-([\d.]+)s/)?.[1]
+    const a = await E.view('t')
     E.tick(7000)
-    const b = still(await E.view('t'))
-    await E.agentTool('ag1', 'Grep')
-    const c = still(await E.view('t'))
-    return [`idle redraw same ${a === b}, change redraws ${a !== c}`, a === b && a !== c]
+    const b = await E.view('t')
+    const ok = a.track === b.track && delay(a) === '0.0' && delay(b) === '7.0'
+    return [`track same ${a.track === b.track}, strip clock ${delay(a)}s → ${delay(b)}s`, ok]
   },
   async running_pill_has_live_clock(E) {
     await create(E)
