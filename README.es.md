@@ -13,13 +13,14 @@ Barras de progreso en vivo sobre el campo de entrada de Claude Code. Claude divi
 - Una fila por tarea: estado, título, barra, porcentaje, botón de cierre
 - La etiqueta de la barra muestra la etapa y el paso actuales; al pasar el cursor, el tiempo transcurrido
 - Las etapas son cápsulas y los pasos, puntos; al pasar el cursor se ve cuándo se alcanzaron
-- Una barra terminada se vuelve verde y muestra el tiempo total
+- Una barra terminada se vuelve verde y muestra el tiempo total y desaparece a los 30 s (`doneBarSeconds` en `/config`)
 - Cuatro estados: en curso, requiere respuesta, error, terminado
 - Cada subagente tiene una fila bajo su tarea: nombre, modelo y effort, herramienta actual, tiempo
 - El plan puede cambiar durante el trabajo; los pasos completados se conservan por título
 - Las barras se guardan por sesión y vuelven al reanudarla
 - Sonidos breves ante una pregunta, un error y al terminar
 - Funciona en la app de escritorio y en la terminal
+- En la terminal la barra sigue el modo claro u oscuro de GNOME con el tema `auto` y toma los colores del tema activo de Omarchy
 
 ### Instalación
 
@@ -41,7 +42,8 @@ claude plugin update plan-progress@zycck-mods
 
 - `/progress` muestra u oculta las barras
 - `/progress-clear` elimina todas las barras
-- `/progress-agents` pliega las franjas de agentes bajo las barras o las vuelve a mostrar (el botón ▾ junto a la ✕ de una barra lo hace solo para esa barra)
+- `/progress-agents` pliega las franjas de agentes bajo las barras o las vuelve a mostrar (el botón de flecha junto a la ✕ de una barra lo hace solo para esa barra)
+- `/plan-progress-autoclose` desactiva o vuelve a activar el cierre automático de las barras terminadas; la elección se mantiene entre sesiones
 
 El botón **Progress** del pie hace lo mismo que `/progress`.
 

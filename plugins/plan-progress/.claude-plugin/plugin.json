@@ -1,6 +1,6 @@
 {
   "name": "plan-progress",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Live plan progress bars above the Claude Code prompt: stages, steps, a pixel fill and soft sounds for decision, error and done",
   "author": {
     "name": "Kirill Serditov",

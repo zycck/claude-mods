@@ -24,6 +24,6 @@ A plan approved in plan mode lands on the bar `plan`; move that one.
 
 The result says `done/total, state, active step`; no need to check the bar.
 
-User commands: `/progress` toggles the bars, `/progress-clear` removes them, `/progress-agents` folds or shows the agent strips (on the desktop and in the fullscreen terminal each bar with strips also has a ▾/▸ button). The **Progress** button in the footer is always shown while the mod is loaded.
+User commands: `/progress` toggles the bars, `/progress-clear` removes them, `/progress-agents` folds or shows the agent strips (on the desktop and in the fullscreen terminal each bar with strips also has a fold button), `/plan-progress-autoclose` turns off or on a finished bar leaving on its own after `doneBarSeconds` (30 s by default). The **Progress** button in the footer is always shown while the mod is loaded.
 
 No `plan_progress` tool in the session means the mod's hooks module did not load: it needs Claude Code 2.1.286 or newer (`claude --version`).
