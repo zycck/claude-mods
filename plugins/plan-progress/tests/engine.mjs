@@ -55,6 +55,10 @@ export async function boot(file, kept = new Map()) {
       run: async (argv, init) => {
         procs.push(argv.join(' '))
         procEnvs.push(init?.env ?? {})
+        // OMARCHY plays the active Omarchy theme's colors.toml; unset, the file is missing
+        if (argv[0] === '/bin/sh' && String(argv[2]).includes('colors.toml')) {
+          return globalThis.OMARCHY === undefined ? { exitCode: 1, stdout: '', stderr: 'No such file or directory' } : { exitCode: 0, stdout: globalThis.OMARCHY, stderr: '' }
+        }
         if (argv[0] === 'gsettings') {
           if (globalThis.SCHEME === undefined) throw new Error('gsettings: not found')
           return { exitCode: 0, stdout: `'${globalThis.SCHEME}'\n`, stderr: '' }
