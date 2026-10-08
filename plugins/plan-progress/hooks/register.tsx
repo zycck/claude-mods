@@ -1895,7 +1895,7 @@ export const register: Register = (on, options) => {
       // Asked last: a slow hook below would otherwise let an older draw set the band after a newer one
       const below = await next(e)
       return below ? (
-        <Box flexDirection="column">
+        <Box flexDirection="column" gap={1}>
           {tree}
           {below}
         </Box>
@@ -1997,7 +1997,7 @@ export const register: Register = (on, options) => {
     )
     const below = await next(e)
     return below ? (
-      <Box flexDirection="column">
+      <Box flexDirection="column" gap={1}>
         {bars}
         {below}
       </Box>
