@@ -13,13 +13,14 @@ Live progress bars above the Claude Code prompt. Claude splits a task into stage
 - One row per task: state, title, bar, percent, close button
 - The pill on the bar shows the current stage and step; hover it for the time spent so far
 - Stages are capsules, steps are dots; hover one to see when it was reached
-- A finished bar turns green and shows the total time
+- A finished bar turns green and shows the total time, then leaves after 30 s (`doneBarSeconds` in `/config`)
 - Four states: running, needs input, error, done
 - Each subagent gets a row under its task: name, model and effort, current tool, time
 - The plan can change mid-run; finished steps are kept by title
 - Bars are saved per session and come back when the session is resumed
 - Short sounds for a question, an error and completion
 - Works in the desktop app and in the terminal
+- In the terminal the bar follows a light or dark GNOME desktop with the `auto` theme, and takes the colors of the active Omarchy theme
 
 ### Install
 
@@ -41,7 +42,8 @@ claude plugin update plan-progress@zycck-mods
 
 - `/progress` shows or hides the bars
 - `/progress-clear` removes all bars
-- `/progress-agents` folds the agent strips under the bars, or shows them again (the ▾ button next to a bar's ✕ does it for that bar)
+- `/progress-agents` folds the agent strips under the bars, or shows them again (the chevron button next to a bar's ✕ does it for that bar)
+- `/plan-progress-autoclose` turns off finished bars leaving on their own, or turns it back on; the choice is kept across sessions
 
 The **Progress** button in the footer does the same as `/progress`.
 

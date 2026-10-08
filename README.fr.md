@@ -13,13 +13,14 @@ Des barres de progression en direct au-dessus du champ de saisie de Claude Code.
 - Une ligne par tâche : état, titre, barre, pourcentage, bouton de fermeture
 - L'étiquette de la barre indique l'étape et le pas en cours ; au survol, le temps écoulé
 - Les étapes sont des capsules, les pas des points ; au survol, l'heure à laquelle ils ont été atteints
-- Une barre terminée passe au vert et affiche la durée totale
+- Une barre terminée passe au vert et affiche la durée totale, puis disparaît après 30 s (`doneBarSeconds` dans `/config`)
 - Quatre états : en cours, réponse attendue, erreur, terminé
 - Chaque sous-agent a sa ligne sous sa tâche : nom, modèle et effort, outil en cours, durée
 - Le plan peut changer en cours de route ; les pas terminés sont conservés d'après leur titre
 - Les barres sont enregistrées par session et reviennent à sa reprise
 - Des sons brefs pour une question, une erreur et la fin
 - Fonctionne dans l'application de bureau et dans le terminal
+- Dans le terminal, la barre suit le mode clair ou sombre de GNOME avec le thème `auto` et prend les couleurs du thème Omarchy actif
 
 ### Installation
 
@@ -41,7 +42,8 @@ claude plugin update plan-progress@zycck-mods
 
 - `/progress` affiche ou masque les barres
 - `/progress-clear` supprime toutes les barres
-- `/progress-agents` replie les bandes d'agents sous les barres ou les réaffiche (le bouton ▾ à côté du ✕ d'une barre le fait pour cette barre)
+- `/progress-agents` replie les bandes d'agents sous les barres ou les réaffiche (le bouton flèche à côté du ✕ d'une barre le fait pour cette barre)
+- `/plan-progress-autoclose` désactive ou réactive la fermeture automatique des barres terminées ; le choix est conservé entre les sessions
 
 Le bouton **Progress** en bas fait la même chose que `/progress`.
 
