@@ -148,15 +148,19 @@ function applyOps(stages: PlanStage[], input: Raw, now: number): { stages: PlanS
   return { stages: next, missing }
 }
 
+// steps may arrive as plain strings, a stage may call its name "title", and a flat list may come as top-level "steps"
+const asSteps = (v: unknown): Raw[] => (Array.isArray(v) ? v.map(x => (typeof x === 'string' ? { title: x } : x)).filter(x => x && typeof x === 'object') : []) as Raw[]
+
 // the new bar, or the refusal for a call that names steps the bar does not have
 function normalize(input: Raw, prev: Plan | null, now: number, id: string): Plan | string {
-  const sent = list(input.stages)
+  const sentStages = list(input.stages).length > 0 ? list(input.stages) : asSteps(input.steps).length > 0 ? [{ name: str(input.title, 80) || 'Tasks', steps: input.steps } as Raw] : []
+  const sent = sentStages
     .map(s => ({
-      name: str(s.name, 80) || 'Stage',
-      steps: list(s.steps).map(st => ({
+      name: str(s.name, 80) || str(s.title, 80) || 'Stage',
+      steps: asSteps(s.steps).map(st => ({
         title: str(st.title) || 'Step',
         status: status(st.status),
-        substeps: list(st.substeps).map(sub => ({ title: str(sub.title) || '…', status: status(sub.status) })),
+        substeps: asSteps(st.substeps).map(sub => ({ title: str(sub.title) || '…', status: status(sub.status) })),
       })),
     }))
     .filter(s => s.steps.length > 0) as PlanStage[]
@@ -2757,14 +2761,19 @@ async function dropPlan($: EngineInterface, id: string, leftAt?: number) {
   await saveNow($)
 }
 
-// substeps are left out: the bar never draws them and short ops cannot reach them
+// substeps are left out: the bar never draws them and short ops cannot reach them; a plain string is its title
 const STEP_SCHEMA = {
-  type: 'object',
-  required: ['title'],
-  properties: {
-    title: { type: 'string' },
-    status: { enum: STATUSES, description: 'Default pending' },
-  },
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      required: ['title'],
+      properties: {
+        title: { type: 'string' },
+        status: { enum: STATUSES, description: 'Default pending' },
+      },
+    },
+  ],
 }
 
 // edits are the work the enforcement below counts. Shell calls are never refused or counted: the host marks only
@@ -3088,6 +3097,11 @@ export const register: Register = (on, options) => {
             description: 'Full breakdown: when creating, or resent under the same id when the plan changes',
             items: { type: 'object', required: ['name', 'steps'], properties: { name: { type: 'string' }, steps: { type: 'array', items: STEP_SCHEMA } } },
           },
+          steps: {
+            type: 'array',
+            description: 'One flat list (kind "todo") instead of stages: step titles or {title}',
+            items: STEP_SCHEMA,
+          },
           next: { type: 'boolean', description: 'Active step finished, start the next one' },
           done: { type: 'array', items: { type: 'string' }, description: 'Step titles now finished' },
           active: { type: 'string', description: 'Step title now in progress' },
@@ -3178,7 +3192,11 @@ export const register: Register = (on, options) => {
       prev => {
         const made = normalize(raw, prev, now, id)
         if (typeof made === 'string') return made
-        if (made.stages.length === 0) return `plan_progress: no bar "${id}" yet; create it with title and stages.`
+        if (made.stages.length === 0) {
+          // a breakdown that was sent but did not parse is a format problem, not a missing bar
+          const sentAny = (Array.isArray(raw.stages) && raw.stages.length > 0) || (Array.isArray(raw.steps) && raw.steps.length > 0)
+          return sentAny ? `plan_progress: could not read the breakdown for "${id}"; send stages:[{name, steps:[{title}]}], steps may be plain strings.` : `plan_progress: no bar "${id}" yet; create it with title and stages.`
+        }
         // a bar belongs to the loop that made it; the main loop moving one takes it over. A subagent resumed under its id
         // (a message sent to it) takes back the bar it made, handed to the main loop when its run ended
         const isMine = !!prev && !prev.byAgent && handedOver.get(id) === e.agentId

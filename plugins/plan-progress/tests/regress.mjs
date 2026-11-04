@@ -225,8 +225,25 @@ const C = {
   },
   async T06_T07_create_without_status(E) {
     const r = await E.call({ id: 't', title: 'Task', stages: [{ name: 'One', steps: [{ title: 'A' }, { title: 'B' }] }] })
-    const req = E.toolSpec.inputSchema.properties.stages.items.properties.steps.items.required
+    const req = E.toolSpec.inputSchema.properties.stages.items.properties.steps.items.anyOf.find(s => s.type === 'object').required
     return [`${E.steps('t')}; ${res(r)}; required ${req}`, E.steps('t') === 'A:active B:pending' && req.join() === 'title']
+  },
+  async string_steps_and_stage_title(E) {
+    // a model's first guess at the format: steps as plain strings, the stage calling its name "title"; it used to
+    // answer "no bar yet", as if nothing had been sent
+    const r = await E.call({ id: 't', title: 'Task', stages: [{ title: 'One', steps: ['A', 'B'] }, { name: 'Two', steps: ['C'] }] })
+    return [`${E.steps('t')}; ${res(r)}`, r.deny === undefined && E.steps('t') === 'A:active B:pending C:pending' && E.bar('t').stages[0].name === 'One']
+  },
+  async flat_steps_make_a_todo(E) {
+    // the rules offer kind "todo" for one flat list; a flat top-level steps list is that list
+    const r = await E.call({ id: 't', title: 'Task', kind: 'todo', steps: ['A', { title: 'B' }, 'C'] })
+    return [`${E.steps('t')}; ${res(r)}`, r.deny === undefined && E.steps('t') === 'A:active B:pending C:pending' && E.bar('t').kind === 'todo']
+  },
+  async unreadable_breakdown_is_named(E) {
+    // a breakdown that was sent but did not parse answers the format; only a bare op without a bar says "no bar yet"
+    const bad = await E.call({ id: 't', title: 'Task', stages: [{ name: 'One', steps: [] }] })
+    const bare = await E.call({ id: 'nope', next: true })
+    return [`${res(bad)} | ${res(bare)}`, (bad.deny ?? '').includes('could not read the breakdown') && (bare.deny ?? '').includes('no bar "nope" yet')]
   },
   async T08_reimport_keeps_done(E) {
     const plan = '# Fix login\n\n## Analyse\n- Read code\n- Find bug\n## Fix\n- Patch\n- Test'
@@ -339,7 +356,7 @@ const C = {
     return [`12 shell calls, reminder ${reminded}`, !reminded]
   },
   async T27_no_substeps_in_schema(E) {
-    const step = E.toolSpec.inputSchema.properties.stages.items.properties.steps.items.properties
+    const step = E.toolSpec.inputSchema.properties.stages.items.properties.steps.items.anyOf.find(s => s.type === 'object').properties
     return [Object.keys(step).join(), !('substeps' in step)]
   },
   async T30_T31_no_import(E) {
